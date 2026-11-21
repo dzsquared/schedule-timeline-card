@@ -50,7 +50,7 @@ The images follow your GitHub theme (light or dark).
 - Uses the time zone configured in Home Assistant for the "now" marker.
 - Uses your theme colors by default. Colors can be overridden.
 - Visual editor, so no YAML is required.
-- Portuguese and English texts, chosen from your Home Assistant language.
+- Portuguese and English card text and editor labels, chosen from the Home Assistant instance language.
 
 ## Installation
 
@@ -137,6 +137,58 @@ on_color: "#2196f3"
 | `on_color` | string | `var(--success-color)` | Any CSS color for the on-periods. |
 | `now_color` | string | `var(--error-color)` | Any CSS color for the current time marker. |
 | `tap_action` | string | `more-info` | `more-info` or `none`. |
+
+## Language and translations
+
+The card and its visual editor use the **instance/server language** from
+`hass.config.language` (Home Assistant's general settings). A user's profile
+language and the browser language do not override it. Changes take effect when
+Home Assistant sends the updated configuration to the frontend.
+
+- Translations fall back per message: exact locale (such as `pt-BR`), base language
+  (`pt`), then English (`en`). Missing or invalid server locales use English.
+- Weekday labels use the full server locale, even when messages fall back to
+  English. Schedule calculations continue to use the instance time zone.
+- Configuration keys and values, entity names, and schedule data are not translated.
+- Times retain the card's existing 24-hour format.
+- The card-picker name and description are static English metadata: Home Assistant
+  registers them before an instance configuration is supplied to the card.
+- If an invalid card configuration is supplied before `hass`, its validation error
+  uses English because the instance language is not yet available.
+
+### Adding another language
+
+All translations live in the `I18N` object in `schedule-timeline-card.js`, so the
+released card remains a single JavaScript file with no build step or translation
+file downloads.
+
+1. Add a lower-case BCP 47 language key, such as `de`, or a regional override such
+   as `pt-br`.
+2. Follow the English dictionary's `card`, `editor`, and `errors` structure. A
+   dictionary may be partial; missing entries fall back individually.
+3. Translate complete messages, retaining their named placeholders exactly.
+   For example, `nextOnToday: "Turns on at {time}"` can move `{time}` anywhere
+   in the translated sentence. Do not translate placeholder names.
+4. Keep schema/configuration values such as `calendar` unchanged. The editor schema
+   factory translates only their labels.
+5. Run `node --check schedule-timeline-card.js` and
+   `node --test tests/*.test.cjs`. Tests check translation keys and placeholders,
+   fallback behavior, language changes, all display modes, and editor saving.
+6. Verify the card and visual editor in Home Assistant with the instance language
+   set to the new locale.
+
+## Using a fork through HACS
+
+Add your fork's GitHub URL as a **Dashboard** custom repository in HACS. Install
+only one copy of this card; the fork and upstream register the same custom element.
+Remove the upstream installation and its resource before switching to the fork.
+
+For updates, work on a branch, merge into your fork's `main`, and increment
+`CARD_VERSION` (this version is `1.0.6`). The existing validation/release workflows
+publish the JavaScript asset once validation passes. Enable Actions and give the
+release workflow read/write permissions in your fork, as described below. Update
+or redownload the card in HACS after the release appears, then reload the frontend.
+If stale code persists, clear the frontend cache.
 
 ## How it works
 
