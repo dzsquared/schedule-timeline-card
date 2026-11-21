@@ -1,49 +1,147 @@
 /*!
- * schedule-timeline-card v1.0.0
+ * schedule-timeline-card
  * Card customizado para entidades `schedule` do Home Assistant.
  * Modos: simple | next | calendar
  */
 
-const CARD_VERSION = "1.0.5";
+const CARD_VERSION = "1.0.6";
 const DAY_KEYS = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
 const REFETCH_MS = 5 * 60 * 1000;
 const TICK_MS = 30 * 1000;
 const AFTER_TAP_WINDOW_MS = 15 * 60 * 1000;
 const AFTER_TAP_REFETCH_MS = 5 * 1000;
 
+// Keep English complete. Other locales may omit keys and inherit English per key.
+// Use lower-case BCP 47 locale keys (e.g. "pt-br") for regional overrides.
 const I18N = {
-  pt: {
-    on: "Ligado",
-    off: "Desligado",
-    unavailable: "Indispon\u00edvel",
-    turnsOn: "Liga",
-    turnsOff: "Desliga",
-    at: "\u00e0s",
-    tomorrow: "amanh\u00e3",
-    in: "em",
-    now: "Agora",
-    noNext: "Sem pr\u00f3ximo evento",
-    loading: "Carregando hor\u00e1rios\u2026",
-    noConfig:
-      "Hor\u00e1rios n\u00e3o encontrados. Schedules definidos em YAML n\u00e3o s\u00e3o expostos pela API do helper.",
-    missing: "Entidade n\u00e3o encontrada:",
-  },
   en: {
-    on: "On",
-    off: "Off",
-    unavailable: "Unavailable",
-    turnsOn: "Turns on",
-    turnsOff: "Turns off",
-    at: "at",
-    tomorrow: "tomorrow",
-    in: "in",
-    now: "Now",
-    noNext: "No upcoming event",
-    loading: "Loading schedule\u2026",
-    noConfig:
-      "Schedule not found. Schedules defined in YAML are not exposed by the helper API.",
-    missing: "Entity not found:",
+    card: {
+      on: "On",
+      off: "Off",
+      unavailable: "Unavailable",
+      now: "Now",
+      noNext: "No upcoming event",
+      loading: "Loading schedule…",
+      noConfig: "Schedule not found. Schedules defined in YAML are not exposed by the helper API.",
+      missing: "Entity not found: {entity}",
+      nextOnToday: "Turns on at {time}",
+      nextOffToday: "Turns off at {time}",
+      nextOnTomorrow: "Turns on tomorrow at {time}",
+      nextOffTomorrow: "Turns off tomorrow at {time}",
+      nextOnDay: "Turns on {day} at {time}",
+      nextOffDay: "Turns off {day} at {time}",
+      countdown: "in {duration}",
+      lessThanMinute: "<1min",
+      minutes: "{minutes}min",
+      hours: "{hours}h",
+      hoursMinutes: "{hours}h {minutes}min",
+      daysHours: "{days}d {hours}h",
+      axisHour: "{hour}h",
+      nowAt: "Now ({time})",
+    },
+    editor: {
+      entity: "Schedule entity",
+      name: "Name (optional)",
+      icon: "Icon (on)",
+      icon_off: "Icon (off)",
+      mode: "Mode",
+      days: "Days displayed",
+      start_hour: "Start hour",
+      end_hour: "End hour",
+      show_icon: "Show icon",
+      show_next: "Show next event",
+      show_now_marker: "Show now marker",
+      show_total: "Total hours per day",
+      show_legend: "Show legend",
+      on_color: "On color (CSS)",
+      now_color: "Now marker color (CSS)",
+      modes: {
+        simple: "Simple (on/off)",
+        next: "Next event",
+        calendar: "Calendar",
+      },
+    },
+    errors: { missingEntity: "Define 'entity' (e.g. schedule.irrigation)" },
   },
+  pt: {
+    card: {
+      on: "Ligado",
+      off: "Desligado",
+      unavailable: "Indisponível",
+      now: "Agora",
+      noNext: "Sem próximo evento",
+      loading: "Carregando horários…",
+      noConfig: "Horários não encontrados. Schedules definidos em YAML não são expostos pela API do helper.",
+      missing: "Entidade não encontrada: {entity}",
+      nextOnToday: "Liga às {time}",
+      nextOffToday: "Desliga às {time}",
+      nextOnTomorrow: "Liga amanhã às {time}",
+      nextOffTomorrow: "Desliga amanhã às {time}",
+      nextOnDay: "Liga {day} às {time}",
+      nextOffDay: "Desliga {day} às {time}",
+      countdown: "em {duration}",
+      lessThanMinute: "<1min",
+      minutes: "{minutes}min",
+      hours: "{hours}h",
+      hoursMinutes: "{hours}h {minutes}min",
+      daysHours: "{days}d {hours}h",
+      axisHour: "{hour}h",
+      nowAt: "Agora ({time})",
+    },
+    editor: {
+      entity: "Entidade (schedule)",
+      name: "Nome (opcional)",
+      icon: "Ícone (ligado)",
+      icon_off: "Ícone (desligado)",
+      mode: "Modo",
+      days: "Dias exibidos",
+      start_hour: "Hora inicial",
+      end_hour: "Hora final",
+      show_icon: "Mostrar ícone",
+      show_next: "Mostrar próximo evento",
+      show_now_marker: "Marcador de agora",
+      show_total: "Total de horas por dia",
+      show_legend: "Mostrar legenda",
+      on_color: "Cor de ligado (CSS)",
+      now_color: "Cor do marcador (CSS)",
+      modes: {
+        simple: "Simples (ligado/desligado)",
+        next: "Próximo evento",
+        calendar: "Calendário",
+      },
+    },
+    errors: { missingEntity: "Defina 'entity' (ex.: schedule.irrigacao)" },
+  },
+};
+
+// The instance language intentionally takes precedence over browser/user settings.
+function serverLocale(hass) {
+  const language = hass?.config?.language;
+  if (typeof language !== "string" || !language.trim()) return "en";
+  try {
+    return Intl.getCanonicalLocales(language.trim().replace(/_/g, "-"))[0];
+  } catch {
+    return "en";
+  }
+}
+
+function translate(locale, key, values = {}) {
+  const normalized = locale.toLowerCase();
+  const locales = [...new Set([normalized, normalized.split("-")[0], "en"])];
+  for (const language of locales) {
+    const message = key.split(".").reduce((value, part) =>
+      value && Object.hasOwn(value, part) ? value[part] : undefined, I18N[language]);
+    if (typeof message === "string") {
+      return message.replace(/\{(\w+)\}/g, (placeholder, name) =>
+        Object.hasOwn(values, name) ? String(values[name]) : placeholder);
+    }
+  }
+  return key;
+}
+
+const translator = (hass) => {
+  const locale = serverLocale(hass);
+  return (key, values) => translate(locale, key, values);
 };
 
 const pad = (n) => String(n).padStart(2, "0");
@@ -59,19 +157,19 @@ const clamp = (v, a, b) => {
 
 const fmtHM = (min) => (min >= 1440 ? "24:00" : `${pad(Math.floor(min / 60))}:${pad(min % 60)}`);
 
-const fmtDuration = (min) => {
+const fmtDuration = (min, t) => {
   const h = Math.floor(min / 60);
   const m = Math.round(min % 60);
-  if (h === 0) return `${m}min`;
-  return m ? `${h}h ${pad(m)}min` : `${h}h`;
+  if (h === 0) return t("card.minutes", { minutes: m });
+  return m ? t("card.hoursMinutes", { hours: h, minutes: pad(m) }) : t("card.hours", { hours: h });
 };
 
-const fmtUntil = (minutes) => {
+const fmtUntil = (minutes, t) => {
   const m = Math.max(0, Math.round(minutes));
-  if (m < 1) return "<1min";
-  if (m < 60) return `${m}min`;
-  if (m < 1440) return `${Math.floor(m / 60)}h ${pad(m % 60)}min`;
-  return `${Math.floor(m / 1440)}d ${Math.floor((m % 1440) / 60)}h`;
+  if (m < 1) return t("card.lessThanMinute");
+  if (m < 60) return t("card.minutes", { minutes: m });
+  if (m < 1440) return t("card.hoursMinutes", { hours: Math.floor(m / 60), minutes: pad(m % 60) });
+  return t("card.daysHours", { days: Math.floor(m / 1440), hours: Math.floor((m % 1440) / 60) });
 };
 
 const parseTime = (s) => {
@@ -120,11 +218,11 @@ class ScheduleTimelineCard extends HTMLElement {
 
   static getStubConfig(hass) {
     const entity = Object.keys((hass && hass.states) || {}).find((id) => id.startsWith("schedule."));
-    return { entity: entity || "schedule.exemplo", mode: "calendar", days: 5 };
+    return { entity: entity || "schedule.example", mode: "calendar", days: 5 };
   }
 
   setConfig(config) {
-    if (!config || !config.entity) throw new Error("Defina 'entity' (ex.: schedule.irrigacao)");
+    if (!config || !config.entity) throw new Error(translator(this._hass)("errors.missingEntity"));
     const days = Math.round(clamp(config.days ?? 5, 1, 7));
     let start = Math.round(clamp(config.start_hour ?? 0, 0, 23));
     let end = Math.round(clamp(config.end_hour ?? 24, 1, 24));
@@ -150,6 +248,9 @@ class ScheduleTimelineCard extends HTMLElement {
   }
 
   set hass(hass) {
+    const locale = serverLocale(hass);
+    const languageChanged = locale !== this._locale;
+    this._locale = locale;
     this._hass = hass;
     if (!this._config) return;
     const st = hass.states[this._config.entity];
@@ -164,7 +265,7 @@ class ScheduleTimelineCard extends HTMLElement {
       this._lastFetch = 0;
     }
     this._maybeFetch();
-    if (changed || !this._shown) {
+    if (changed || languageChanged || !this._shown) {
       this._shown = true;
       this._render();
     }
@@ -236,12 +337,11 @@ class ScheduleTimelineCard extends HTMLElement {
   }
 
   _t() {
-    const lang = (this._hass && this._hass.locale && this._hass.locale.language) || navigator.language || "pt";
-    return String(lang).toLowerCase().startsWith("pt") ? I18N.pt : I18N.en;
+    return translator(this._hass);
   }
 
   _lang() {
-    return (this._hass && this._hass.locale && this._hass.locale.language) || "pt-BR";
+    return serverLocale(this._hass);
   }
 
   _wd(dt) {
@@ -308,19 +408,19 @@ class ScheduleTimelineCard extends HTMLElement {
   }
 
   _nextLabel(n, isOn, np, t) {
-    if (!n) return t.noNext;
-    const verb = isOn ? t.turnsOff : t.turnsOn;
+    if (!n) return t("card.noNext");
+    const action = isOn ? "Off" : "On";
     const time = fmtHM(n.min);
-    if (n.dayDiff <= 0) return `${verb} ${t.at} ${time}`;
-    if (n.dayDiff === 1) return `${verb} ${t.tomorrow} ${time}`;
+    if (n.dayDiff <= 0) return t(`card.next${action}Today`, { time });
+    if (n.dayDiff === 1) return t(`card.next${action}Tomorrow`, { time });
     const dt = new Date(Date.UTC(np.y, np.m - 1, np.d + n.dayDiff));
-    return `${verb} ${this._wd(dt)} ${time}`;
+    return t(`card.next${action}Day`, { day: this._wd(dt), time });
   }
 
   _calendar(np, nowMin, t, sch) {
     const c = this._config;
-    if (!this._list) return `<div class="msg">${t.loading}</div>`;
-    if (!sch) return `<div class="msg">${t.noConfig}</div>`;
+    if (!this._list) return `<div class="msg">${esc(t("card.loading"))}</div>`;
+    if (!sch) return `<div class="msg">${esc(t("card.noConfig"))}</div>`;
 
     const S = c.start_hour * 60;
     const E = c.end_hour * 60;
@@ -335,7 +435,7 @@ class ScheduleTimelineCard extends HTMLElement {
     for (let h = Math.ceil(S / 60 / step) * step; h * 60 <= E; h += step) {
       const p = pct(h * 60);
       const tf = p <= 0 ? "none" : p >= 100 ? "translateX(-100%)" : "translateX(-50%)";
-      ticksHtml += `<span class="tick" style="left:${p.toFixed(2)}%;transform:${tf}">${h}h</span>`;
+      ticksHtml += `<span class="tick" style="left:${p.toFixed(2)}%;transform:${tf}">${esc(t("card.axisHour", { hour: h }))}</span>`;
     }
     const totSpacer = c.show_total ? `<div class="tot"></div>` : "";
     let html = `<div class="grid"><div class="day axis"><div class="lbl"></div><div class="ticks">${ticksHtml}</div>${totSpacer}</div>`;
@@ -352,7 +452,7 @@ class ScheduleTimelineCard extends HTMLElement {
         const a = Math.max(from, S);
         const b = Math.min(to, E);
         if (b <= a) continue;
-        let tip = `${fmtHM(from)} \u2192 ${fmtHM(to)} (${fmtDuration(to - from)})`;
+        let tip = `${fmtHM(from)} \u2192 ${fmtHM(to)} (${fmtDuration(to - from, t)})`;
         if (it.data && typeof it.data === "object") {
           const extra = Object.entries(it.data).map(([k, v]) => `${k}: ${v}`).join(", ");
           if (extra) tip += `\n${extra}`;
@@ -361,14 +461,14 @@ class ScheduleTimelineCard extends HTMLElement {
       }
       const today = i === 0;
       const marker = today && showNow ? `<div class="now" style="left:${nowPct.toFixed(2)}%"></div>` : "";
-      const tot = c.show_total ? `<div class="tot">${total ? fmtDuration(total) : "\u2013"}</div>` : "";
+      const tot = c.show_total ? `<div class="tot">${total ? esc(fmtDuration(total, t)) : "\u2013"}</div>` : "";
       html += `<div class="day${today ? " today" : ""}"><div class="lbl">${esc(this._wd(dt))}</div><div class="track">${blocks}${marker}</div>${tot}</div>`;
     }
     html += `</div>`;
 
     if (c.show_legend) {
-      html += `<div class="legend"><span><i class="dot"></i>${t.on}</span>`;
-      if (showNow) html += `<span><i class="bar"></i>${t.now} (${fmtHM(nowMin)})</span>`;
+      html += `<div class="legend"><span><i class="dot"></i>${esc(t("card.on"))}</span>`;
+      if (showNow) html += `<span><i class="bar"></i>${esc(t("card.nowAt", { time: fmtHM(nowMin) }))}</span>`;
       html += `</div>`;
     }
     return html;
@@ -382,7 +482,7 @@ class ScheduleTimelineCard extends HTMLElement {
     const root = this.shadowRoot;
 
     if (!st) {
-      root.innerHTML = `<style>${STYLE}</style><ha-card><div class="msg">${t.missing} ${esc(c.entity)}</div></ha-card>`;
+      root.innerHTML = `<style>${STYLE}</style><ha-card><div class="msg">${esc(t("card.missing", { entity: c.entity }))}</div></ha-card>`;
       return;
     }
 
@@ -395,16 +495,16 @@ class ScheduleTimelineCard extends HTMLElement {
     const name = c.name || st.attributes.friendly_name || c.entity;
     const sch = this._findSchedule();
 
-    const stateText = unavailable ? t.unavailable : isOn ? t.on : t.off;
+    const stateText = unavailable ? t("card.unavailable") : isOn ? t("card.on") : t("card.off");
     const needNext = c.mode === "next" || (c.mode === "calendar" && c.show_next);
     const n = needNext && !unavailable ? this._next(np, nowMin, now, sch) : null;
-    const nextLabel = needNext ? (unavailable ? t.unavailable : this._nextLabel(n, isOn, np, t)) : "";
-    const countdown = n ? `${t.in} ${fmtUntil(n.until)}` : "";
+    const nextLabel = needNext ? (unavailable ? t("card.unavailable") : this._nextLabel(n, isOn, np, t)) : "";
+    const countdown = n ? t("card.countdown", { duration: fmtUntil(n.until, t) }) : "";
 
     let info;
-    let chip = `<span class="chip${isOn ? " on" : ""}">${stateText}</span>`;
+    let chip = `<span class="chip${isOn ? " on" : ""}">${esc(stateText)}</span>`;
     if (c.mode === "simple") {
-      info = `<div class="name">${esc(name)}</div><div class="sub${isOn ? " on" : ""}">${stateText}</div>`;
+      info = `<div class="name">${esc(name)}</div><div class="sub${isOn ? " on" : ""}">${esc(stateText)}</div>`;
       chip = "";
     } else if (c.mode === "next") {
       info = `<div class="name">${esc(name)}</div><div class="sub nextline"><span class="strong">${esc(nextLabel)}</span>${countdown ? ` \u00b7 ${esc(countdown)}` : ""}</div>`;
@@ -476,24 +576,6 @@ ha-card.compact{padding:8px 12px}
 .msg{padding:8px 0;font-size:13px;color:var(--secondary-text-color)}
 `;
 
-const EDITOR_LABELS = {
-  entity: "Entidade (schedule)",
-  name: "Nome (opcional)",
-  icon: "\u00cdcone (ligado)",
-  icon_off: "\u00cdcone (desligado)",
-  mode: "Modo",
-  days: "Dias exibidos",
-  start_hour: "Hora inicial",
-  end_hour: "Hora final",
-  show_icon: "Mostrar \u00edcone",
-  show_next: "Mostrar pr\u00f3ximo evento",
-  show_now_marker: "Marcador de agora",
-  show_total: "Total de horas por dia",
-  show_legend: "Mostrar legenda",
-  on_color: "Cor de ligado (CSS)",
-  now_color: "Cor do marcador (CSS)",
-};
-
 const EDITOR_DEFAULTS = {
   mode: "simple",
   days: 5,
@@ -506,7 +588,7 @@ const EDITOR_DEFAULTS = {
   show_legend: true,
 };
 
-const EDITOR_SCHEMA = [
+const editorSchema = (t) => [
   { name: "entity", required: true, selector: { entity: { domain: "schedule" } } },
   { name: "name", selector: { text: {} } },
   {
@@ -523,9 +605,9 @@ const EDITOR_SCHEMA = [
       select: {
         mode: "dropdown",
         options: [
-          { value: "simple", label: "Simples (ligado/desligado)" },
-          { value: "next", label: "Pr\u00f3ximo evento" },
-          { value: "calendar", label: "Calend\u00e1rio" },
+          { value: "simple", label: t("editor.modes.simple") },
+          { value: "next", label: t("editor.modes.next") },
+          { value: "calendar", label: t("editor.modes.calendar") },
         ],
       },
     },
@@ -567,14 +649,18 @@ class ScheduleTimelineCardEditor extends HTMLElement {
   }
 
   set hass(hass) {
+    const locale = serverLocale(hass);
+    const languageChanged = locale !== this._locale;
+    this._locale = locale;
     this._hass = hass;
-    if (this._form) this._form.hass = hass;
+    if (languageChanged) this._render();
+    else if (this._form) this._form.hass = hass;
   }
 
   _render() {
+    if (!this._config) return;
     if (!this._form) {
       this._form = document.createElement("ha-form");
-      this._form.computeLabel = (s) => EDITOR_LABELS[s.name] || s.name;
       this._form.addEventListener("value-changed", (ev) => {
         ev.stopPropagation();
         this._config = ev.detail.value;
@@ -585,7 +671,14 @@ class ScheduleTimelineCardEditor extends HTMLElement {
       this.appendChild(this._form);
     }
     this._form.hass = this._hass;
-    this._form.schema = EDITOR_SCHEMA;
+    const t = translator(this._hass);
+    this._form.computeLabel = (schema) => {
+      if (!schema.name) return "";
+      const key = `editor.${schema.name}`;
+      const label = t(key);
+      return label === key ? schema.name : label;
+    };
+    this._form.schema = editorSchema(t);
     this._form.data = { ...EDITOR_DEFAULTS, ...this._config };
   }
 }
@@ -597,7 +690,7 @@ window.customCards = window.customCards || [];
 window.customCards.push({
   type: "schedule-timeline-card",
   name: "Schedule Timeline Card",
-  description: "Exibe entidades schedule: estado, pr\u00f3ximo evento e calend\u00e1rio de horas por dia.",
+  description: "Displays schedule entities: state, next event, and a daily timeline.",
 });
 
 console.info(`%c SCHEDULE-TIMELINE-CARD %c v${CARD_VERSION} `, "color:#fff;background:#43a047;font-weight:500", "color:#43a047");
